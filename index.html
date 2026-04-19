@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
   <title>🧱 Belanja Material - WA Rapi & PDF Foto</title>
-  <!-- jsPDF untuk PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Roboto, sans-serif; }
@@ -49,7 +48,7 @@
 <body>
 <div class="app-container">
   <h1>🧱 Belanja Material</h1>
-  <div class="subhead">by. Aziz fathunaim</div>
+  <div class="subhead">by. Aziz Fathunaim</div>
   <div class="subhead">https://script.google.com/macros/s/AKfycbyrQsCyL9xZFR3HQXzqlie5uMU57yjQ0gqb9QpQPz6aM9TaTvHBJPfkbehZJgVHC0puWg/exec</div>
 
   <!-- FORM INPUT -->
@@ -57,26 +56,11 @@
     <div style="margin-bottom:15px; font-weight:700; color:#1e3a5f;">➕ Tambah Material</div>
     <form id="materialForm">
       <div class="form-grid">
-        <div class="input-group">
-          <label>📦 Nama</label>
-          <input type="text" id="nama" placeholder="Semen Tiga Roda" required>
-        </div>
-        <div class="input-group">
-          <label>🔢 Jumlah</label>
-          <input type="number" id="jumlah" placeholder="0" min="0.01" step="0.01" required>
-        </div>
-        <div class="input-group">
-          <label>📏 Satuan</label>
-          <input type="text" id="satuan" placeholder="contoh: sak, kg, batang" required>
-        </div>
-        <div class="input-group">
-          <label>💰 Harga (Rp)</label>
-          <input type="number" id="harga" placeholder="0" min="0" step="0.01" required>
-        </div>
-        <div class="input-group">
-          <label>📅 Tanggal</label>
-          <input type="date" id="tanggal" required>
-        </div>
+        <div class="input-group"><label>📦 Nama</label><input type="text" id="nama" placeholder="Semen Tiga Roda" required></div>
+        <div class="input-group"><label>🔢 Jumlah</label><input type="number" id="jumlah" placeholder="0" min="0.01" step="0.01" required></div>
+        <div class="input-group"><label>📏 Satuan</label><input type="text" id="satuan" placeholder="contoh: sak, kg" required></div>
+        <div class="input-group"><label>💰 Harga (Rp)</label><input type="number" id="harga" placeholder="0" min="0" step="0.01" required></div>
+        <div class="input-group"><label>📅 Tanggal</label><input type="date" id="tanggal" required></div>
         <div class="input-group">
           <label>📸 Foto Nota</label>
           <input type="file" id="fotoNota" accept="image/*" capture="environment">
@@ -99,29 +83,27 @@
     </div>
     <div class="table-wrapper">
       <table>
-        <thead>
-          <tr><th>No</th><th>Nama</th><th>Jumlah</th><th>Satuan</th><th>Harga</th><th>Total</th><th>Tanggal</th><th>Foto</th><th>Aksi</th></tr>
-        </thead>
+        <thead><tr><th>No</th><th>Nama</th><th>Jumlah</th><th>Satuan</th><th>Harga</th><th>Total</th><th>Tanggal</th><th>Foto</th><th>Aksi</th></tr></thead>
         <tbody id="listBody"></tbody>
       </table>
     </div>
-    <div id="emptyRowMessage" class="empty-message">🛒 Belum ada material. Silakan tambahkan.</div>
+    <div id="emptyRowMessage" class="empty-message">🛒 Belum ada material.</div>
 
     <div class="summary-bar">
       <div class="total-text">Total</div>
       <div class="total-amount" id="totalDisplay">Rp 0</div>
     </div>
 
-    <!-- URL GOOGLE APPS SCRIPT -->
+    <!-- URL SPREADSHEET -->
     <div class="url-section">
       <span style="font-weight:600;">🔗 URL Script</span>
       <input type="text" id="scriptUrlInput" class="url-input" placeholder="https://script.google.com/macros/s/.../exec">
-      <button id="saveUrlBtn" class="btn-secondary" style="padding:12px 20px;">💾 Simpan URL</button>
+      <button id="saveUrlBtn" class="btn-secondary" style="padding:12px 20px;">💾 Simpan</button>
     </div>
-    <div id="statusApi" style="margin: 10px 0 0 15px; font-size:0.9rem; color:#2c3e50;"></div>
+    <div id="statusApi" style="margin:10px 0 0 15px; font-size:0.9rem; color:#2c3e50;"></div>
 
     <div class="action-buttons">
-      <button id="exportSheetsBtn" class="btn-sheets">📊 Export ke Spreadsheet</button>
+      <button id="exportSheetsBtn" class="btn-sheets">📊 Export Spreadsheet</button>
       <button id="exportFotoPdfBtn" class="btn-pdf">🖼️ Export Foto ke PDF</button>
     </div>
 
@@ -140,7 +122,7 @@
   (function(){
     "use strict";
 
-    // --- STATE (localStorage) ---
+    // --- STATE ---
     let items = [];
     let nextId = 1000;
     let savedPhoto = null;
@@ -158,9 +140,7 @@
       } catch(e) {}
     }
     function saveToStorage() {
-      try {
-        localStorage.setItem('materialBelanja', JSON.stringify({ items, nextId }));
-      } catch(e) {}
+      try { localStorage.setItem('materialBelanja', JSON.stringify({ items, nextId })); } catch(e) {}
     }
     loadFromStorage();
 
@@ -261,14 +241,14 @@
       if (items.length && confirm('Hapus semua material?')) { items = []; saveToStorage(); renderList(); showToast('Semua data dihapus'); }
     });
 
-    // ========== WHATSAPP (ikon rapi, tanpa tanda tanya) ==========
+    // ========== WHATSAPP RAPI ==========
     function waMessage() {
       if (!items.length) return 'Daftar belanja material kosong.';
       let msg = `*DAFTAR BELANJA MATERIAL*\n${new Date().toLocaleDateString('id-ID')}\n========================\n`;
       let total = 0;
       items.forEach((it,i) => {
         const sub = calcTotal(it.jumlah, it.harga); total += sub;
-        msg += `${i+1}. ${it.nama} — ${it.jumlah} ${it.satuan} x ${formatRupiah(it.harga)} = ${formatRupiah(sub)}\n   Tgl: ${it.tanggal}`;
+        msg += `${i+1}. ${it.nama} - ${it.jumlah} ${it.satuan} x ${formatRupiah(it.harga)} = ${formatRupiah(sub)}\n   Tgl: ${it.tanggal}`;
         if (it.fotoName) msg += ` | Foto: ${it.fotoName}`;
         msg += '\n\n';
       });
@@ -288,14 +268,13 @@
       window.open(url, '_blank');
     });
 
-    // Simpan URL
     saveUrlBtn.addEventListener('click', () => {
       const url = scriptUrlInput.value.trim();
       if (url) { googleScriptUrl = url; localStorage.setItem('gsUrl', url); showToast('URL disimpan'); }
       else alert('Masukkan URL yang valid.');
     });
 
-    // ========== EXPORT KE SPREADSHEET ==========
+    // ========== EXPORT SPREADSHEET ==========
     async function exportToSheets() {
       if (!items.length) { alert('Tidak ada data.'); return; }
       if (!googleScriptUrl) { alert('Simpan URL dulu.'); return; }
@@ -303,7 +282,6 @@
       let ok = 0, fail = 0;
       const ts = new Date().toISOString();
       const tglExp = new Date().toLocaleDateString('id-ID');
-
       for (let it of items) {
         const payload = {
           timestamp: ts, tanggalExport: tglExp, namaMaterial: it.nama, jumlah: it.jumlah,
@@ -324,10 +302,20 @@
     }
     exportSheetsBtn.addEventListener('click', exportToSheets);
 
-    // ========== EXPORT FOTO KE PDF (HANYA FOTO + NAMA FILE) ==========
+    // ========== EXPORT FOTO KE PDF (UNIK & DATA LENGKAP) ==========
     async function exportFotoKePdf() {
-      const itemsWithFoto = items.filter(it => it.fotoURL && it.fotoURL.startsWith('data:image'));
-      if (itemsWithFoto.length === 0) {
+      // Kelompokkan item berdasarkan fotoURL (hanya yang memiliki foto)
+      const fotoMap = new Map();
+      items.forEach(it => {
+        if (it.fotoURL && it.fotoURL.startsWith('data:image')) {
+          if (!fotoMap.has(it.fotoURL)) {
+            fotoMap.set(it.fotoURL, { url: it.fotoURL, name: it.fotoName, items: [] });
+          }
+          fotoMap.get(it.fotoURL).items.push(it);
+        }
+      });
+
+      if (fotoMap.size === 0) {
         alert('Tidak ada foto untuk diekspor ke PDF.');
         return;
       }
@@ -335,7 +323,6 @@
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       
-      // Judul
       doc.setFontSize(16);
       doc.setTextColor(30, 58, 95);
       doc.text('KOLEKSI FOTO NOTA', 15, 20);
@@ -346,74 +333,72 @@
       let y = 40;
       const pageWidth = 210;
       const margin = 15;
-      const maxImgWidth = pageWidth - 2 * margin; // 180mm
-      const maxImgHeight = 150; // mm
+      const maxImgWidth = pageWidth - 2 * margin;
+      const maxImgHeight = 120;
 
-      for (let i = 0; i < itemsWithFoto.length; i++) {
-        const it = itemsWithFoto[i];
+      const entries = Array.from(fotoMap.values());
+      
+      for (let idx = 0; idx < entries.length; idx++) {
+        const entry = entries[idx];
         
         // Muat gambar
         const img = await new Promise((resolve, reject) => {
           const image = new Image();
           image.onload = () => resolve(image);
           image.onerror = reject;
-          image.src = it.fotoURL;
+          image.src = entry.url;
         });
 
-        // Hitung dimensi agar proporsional
-        let imgWidth = img.width;
-        let imgHeight = img.height;
-        const ratio = imgWidth / imgHeight;
-        
-        if (imgWidth > maxImgWidth) {
-          imgWidth = maxImgWidth;
-          imgHeight = imgWidth / ratio;
-        }
-        if (imgHeight > maxImgHeight) {
-          imgHeight = maxImgHeight;
-          imgWidth = imgHeight * ratio;
-        }
+        // Hitung dimensi proporsional
+        let w = img.width, h = img.height;
+        const ratio = w / h;
+        if (w > maxImgWidth) { w = maxImgWidth; h = w / ratio; }
+        if (h > maxImgHeight) { h = maxImgHeight; w = h * ratio; }
 
-        // Jika sisa halaman tidak cukup, tambah halaman baru
-        if (y + imgHeight + 15 > 280) {
+        // Cek sisa halaman
+        const neededHeight = h + 10 + (entry.items.length * 12) + 15;
+        if (y + neededHeight > 280) {
           doc.addPage();
           y = 20;
         }
 
-        // Tambahkan gambar
-        const x = (pageWidth - imgWidth) / 2;
-        doc.addImage(img, 'JPEG', x, y, imgWidth, imgHeight);
-        
-        // Nama file di bawah gambar
-        y += imgHeight + 5;
+        const x = (pageWidth - w) / 2;
+        doc.addImage(img, 'JPEG', x, y, w, h);
+        y += h + 5;
+
+        // Info file
         doc.setFontSize(9);
         doc.setTextColor(60);
-        doc.text(`File: ${it.fotoName || 'tanpa nama'}`, margin, y);
-        doc.text(`Material: ${it.nama}`, margin, y + 5);
-        doc.text(`Tanggal: ${it.tanggal}`, margin, y + 10);
-        
-        y += 18; // spasi antar item
-        
-        // Garis pemisah tipis (opsional)
-        if (i < itemsWithFoto.length - 1) {
+        doc.text(`File: ${entry.name || 'tanpa nama'}`, margin, y);
+        y += 5;
+
+        // Data material yang menggunakan foto ini
+        doc.setFontSize(8);
+        doc.setTextColor(40);
+        entry.items.forEach((item, i) => {
+          const total = calcTotal(item.jumlah, item.harga);
+          const line = `${i+1}. ${item.nama} | ${item.jumlah} ${item.satuan} | ${formatRupiah(item.harga)} | Total: ${formatRupiah(total)} | Tgl: ${item.tanggal}`;
+          doc.text(line, margin, y);
+          y += 4;
+        });
+
+        y += 8;
+        // Garis pemisah (kecuali terakhir)
+        if (idx < entries.length - 1) {
           doc.setDrawColor(200);
-          doc.line(margin, y-5, pageWidth - margin, y-5);
+          doc.line(margin, y-3, pageWidth - margin, y-3);
         }
       }
 
-      // Footer
       doc.setFontSize(8);
       doc.setTextColor(120);
       doc.text('Dicetak dari Aplikasi Catatan Material', 15, 280);
-      
       doc.save(`Foto_Nota_${new Date().toISOString().slice(0,10)}.pdf`);
       showToast('PDF foto berhasil diunduh');
     }
 
     exportFotoPdfBtn.addEventListener('click', () => {
-      exportFotoKePdf().catch(err => {
-        alert('Gagal membuat PDF: ' + err.message);
-      });
+      exportFotoKePdf().catch(err => alert('Gagal membuat PDF: ' + err.message));
     });
 
     renderList();
