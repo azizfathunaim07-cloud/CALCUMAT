@@ -2,14 +2,26 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-  <title>🧱 Belanja Material </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#1e3a5f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Material Belanja">
+  
+  <title>🧱 Belanja Material (PWA)</title>
+  
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- EXIF reader -->
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
   <!-- Dexie (IndexedDB wrapper) -->
   <script src="https://unpkg.com/dexie@3.2.3/dist/dexie.js"></script>
+  
+  <!-- Manifest akan diisi melalui blob -->
+  <link rel="manifest" id="manifest-link">
+
   <style>
     * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Roboto, sans-serif; }
     body { background: #f0f5fa; padding: 16px 12px; min-height: 100vh; display: flex; justify-content: center; }
@@ -48,11 +60,16 @@
     .empty-message { text-align: center; padding: 40px; color: #6a7e94; }
     .info-note { margin-top: 10px; font-size: 0.8rem; color: #4a627a; background: #eef3f9; padding: 8px 16px; border-radius: 30px; }
     .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 24px; border-radius: 40px; opacity: 0; transition: 0.2s; z-index: 1000; }
+    .install-btn { background: #1e3a5f; color: white; border: none; padding: 12px 20px; border-radius: 40px; font-weight: 600; margin-left: 15px; cursor: pointer; display: none; }
+    .install-btn.show { display: inline-block; }
   </style>
 </head>
 <body>
 <div class="app-container">
-  <h1>🧱 Belanja Material</h1>
+  <div style="display: flex; align-items: center; justify-content: space-between;">
+    <h1>🧱 Belanja Material</h1>
+    <button id="installButton" class="install-btn">📲 Install Aplikasi</button>
+  </div>
   <div class="subhead">by. Aziz Fathunaim</div>
   <div class="subhead">https://script.google.com/macros/s/<br>AKfycbyrQsCyL9xZFR3HQXzqlie5uMU57yjQ0gqb<br>9QpQPz6aM9TaTvHBJPfkbehZJgVHC0puWg/exec</div>
 
@@ -127,30 +144,160 @@
   (function(){
     "use strict";
 
+    // ========== PWA SETUP ==========
+    let deferredPrompt;
+    const installBtn = document.getElementById('installButton');
+
+    // Generate ikon dinamis (canvas -> PNG base64)
+    function generateIconBase64(size, text = 'MAT', bgColor = '#1e3a5f') {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // Latar
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, size, size);
+      // Teks
+      ctx.font = `bold ${size * 0.5}px 'Segoe UI', Roboto, sans-serif`;
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, size/2, size/2);
+      return canvas.toDataURL('image/png');
+    }
+
+    const icon192 = generateIconBase64(192, '🧱', '#1e3a5f');
+    const icon512 = generateIconBase64(512, 'MAT', '#1e3a5f');
+
+    const manifestData = {
+      name: "Belanja Material",
+      short_name: "Material",
+      description: "Catatan belanja material dengan foto & ekspor",
+      theme_color: "#1e3a5f",
+      background_color: "#f0f5fa",
+      display: "standalone",
+      scope: "./",
+      start_url: "./",
+      orientation: "portrait",
+      icons: [
+        { src: icon192, sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: icon512, sizes: "512x512", type: "image/png", purpose: "any maskable" }
+      ]
+    };
+
+    // Buat blob URL untuk manifest
+    const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/manifest+json' });
+    const manifestURL = URL.createObjectURL(manifestBlob);
+    document.getElementById('manifest-link').href = manifestURL;
+
+    // ========== SERVICE WORKER ==========
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        const CACHE_NAME = 'material-v2';
+        const urlsToCache = [
+          './',
+          'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+          'https://cdn.jsdelivr.net/npm/exif-js',
+          'https://unpkg.com/dexie@3.2.3/dist/dexie.js'
+        ];
+
+        self.addEventListener('install', event => {
+          event.waitUntil(
+            caches.open(CACHE_NAME)
+              .then(cache => cache.addAll(urlsToCache))
+              .then(() => self.skipWaiting())
+          );
+        });
+
+        self.addEventListener('activate', event => {
+          event.waitUntil(
+            caches.keys().then(cacheNames => {
+              return Promise.all(
+                cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
+              );
+            }).then(() => self.clients.claim())
+          );
+        });
+
+        self.addEventListener('fetch', event => {
+          // Hanya tangani GET
+          if (event.request.method !== 'GET') return;
+          // Abaikan chrome-extension dan blob
+          if (event.request.url.startsWith('chrome-extension://') || event.request.url.startsWith('blob:')) return;
+          
+          event.respondWith(
+            caches.match(event.request).then(response => {
+              return response || fetch(event.request).then(fetchResponse => {
+                // Cache dynamic response (kecuali yang bukan dari origin kita atau CDN yang diizinkan)
+                if (event.request.url.includes(self.location.origin) || 
+                    event.request.url.includes('cdnjs.cloudflare.com') ||
+                    event.request.url.includes('cdn.jsdelivr.net') ||
+                    event.request.url.includes('unpkg.com')) {
+                  const responseClone = fetchResponse.clone();
+                  caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+                }
+                return fetchResponse;
+              }).catch(() => {
+                // Fallback offline bisa dikembalikan halaman utama
+                if (event.request.mode === 'navigate') {
+                  return caches.match('./');
+                }
+                return new Response('Offline', { status: 503 });
+              });
+            })
+          );
+        });
+      `;
+
+      const swBlob = new Blob([swCode], { type: 'application/javascript' });
+      const swURL = URL.createObjectURL(swBlob);
+
+      navigator.serviceWorker.register(swURL)
+        .then(reg => console.log('SW registered', reg))
+        .catch(err => console.warn('SW failed', err));
+    }
+
+    // Install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.classList.add('show');
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') installBtn.classList.remove('show');
+      deferredPrompt = null;
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installBtn.classList.remove('show');
+      deferredPrompt = null;
+    });
+
     // ========== DATABASE INDEXEDDB ==========
     const db = new Dexie('MaterialDB');
     db.version(1).stores({
-      photos: '++id, url, name, orientation',  // foto asli disimpan di sini
-      items: 'id, nama, jumlah, satuan, harga, tanggal, fotoId, fotoName'  // referensi ke foto
+      photos: '++id, url, name, orientation',
+      items: 'id, nama, jumlah, satuan, harga, tanggal, fotoId, fotoName'
     });
 
     // ========== STATE ==========
-    let items = [];               // array objek item dengan fotoId
+    let items = [];
     let nextId = 1000;
-    let savedPhoto = null;        // { url, name, orientation }
+    let savedPhoto = null;
     let useSavedPhoto = false;
     let googleScriptUrl = localStorage.getItem('gsUrl') || '';
 
-    // Load dari IndexedDB & localStorage
     async function loadData() {
       try {
-        // Load metadata dari localStorage (untuk nextId)
         const meta = localStorage.getItem('materialMeta');
         if (meta) {
           const m = JSON.parse(meta);
           nextId = m.nextId || 1000;
         }
-        // Load items dari IndexedDB
         const storedItems = await db.items.toArray();
         items = storedItems.map(it => ({
           id: it.id,
@@ -173,19 +320,16 @@
       localStorage.setItem('materialMeta', JSON.stringify({ nextId }));
     }
 
-    // Simpan foto ke IndexedDB, kembalikan ID
     async function savePhotoToDB(url, name, orientation = 1) {
       const id = await db.photos.add({ url, name, orientation });
       return id;
     }
 
-    // Ambil data foto dari DB (termasuk url asli)
     async function getPhotoFromDB(photoId) {
       if (!photoId) return null;
       return await db.photos.get(photoId);
     }
 
-    // Hapus foto jika tidak ada item yang merujuk
     async function cleanupOrphanPhotos() {
       const usedPhotoIds = new Set(items.map(it => it.fotoId).filter(id => id !== null));
       const allPhotos = await db.photos.toArray();
@@ -196,7 +340,6 @@
       }
     }
 
-    // Simpan item ke DB
     async function saveItemsToDB() {
       await db.items.clear();
       await db.items.bulkAdd(items.map(it => ({
@@ -242,13 +385,57 @@
     tanggalInput.value = new Date().toISOString().split('T')[0];
     scriptUrlInput.value = googleScriptUrl;
 
-    // Helper
     function formatRupiah(n) { return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
     function calcTotal(j,h) { return (parseFloat(j)||0)*(parseFloat(h)||0); }
     function escapeHtml(t) { if(!t) return t; const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
     function showToast(m) { const t=document.getElementById('toast'); t.textContent=m; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,2000); }
 
-    // Render tabel dengan thumbnail (ambil foto dari DB secara asynchronous)
+    function applyExifOrientation(dataUrl, knownOrientation = null) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          if (knownOrientation && knownOrientation !== 1) {
+            resolve(rotateImage(img, knownOrientation));
+            return;
+          }
+          EXIF.getData(img, function() {
+            const orientation = EXIF.getTag(this, 'Orientation') || 1;
+            resolve(rotateImage(img, orientation));
+          });
+        };
+        img.src = dataUrl;
+      });
+    }
+
+    function rotateImage(img, orientation) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let width = img.width;
+      let height = img.height;
+      
+      if (orientation >= 5 && orientation <= 8) {
+        canvas.width = height;
+        canvas.height = width;
+      } else {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      
+      switch (orientation) {
+        case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
+        case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
+        case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
+        case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+        case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
+        case 7: ctx.transform(0, -1, -1, 0, height, width); break;
+        case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
+        default: break;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.9);
+    }
+
     async function renderList() {
       if(!items.length) {
         listBody.innerHTML = ''; emptyMessage.style.display = 'block'; totalDisplay.textContent = formatRupiah(0);
@@ -256,14 +443,12 @@
       }
       emptyMessage.style.display = 'none';
       
-      // Siapkan array promise untuk mengambil thumbnail
       const rows = await Promise.all(items.map(async (it, i) => {
         const tot = calcTotal(it.jumlah, it.harga);
         let fotoHtml = '';
         if (it.fotoId) {
           const photo = await getPhotoFromDB(it.fotoId);
           if (photo && photo.url) {
-            // Buat thumbnail dengan orientasi yang sudah diperbaiki
             const correctedUrl = await applyExifOrientation(photo.url, photo.orientation);
             fotoHtml = `<img src="${correctedUrl}" class="foto-thumb">`;
           } else {
@@ -301,70 +486,16 @@
       });
     }
 
-    // Fungsi untuk membaca EXIF dan mengembalikan dataURL yang sudah dirotasi
-    function applyExifOrientation(dataUrl, knownOrientation = null) {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          // Jika orientasi sudah diketahui (dari input sebelumnya), gunakan itu
-          if (knownOrientation && knownOrientation !== 1) {
-            resolve(rotateImage(img, knownOrientation));
-            return;
-          }
-          // Baca EXIF
-          EXIF.getData(img, function() {
-            const orientation = EXIF.getTag(this, 'Orientation') || 1;
-            resolve(rotateImage(img, orientation));
-          });
-        };
-        img.src = dataUrl;
-      });
-    }
-
-    function rotateImage(img, orientation) {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      let width = img.width;
-      let height = img.height;
-      
-      // Tentukan dimensi canvas berdasarkan orientasi
-      if (orientation >= 5 && orientation <= 8) {
-        canvas.width = height;
-        canvas.height = width;
-      } else {
-        canvas.width = width;
-        canvas.height = height;
-      }
-      
-      // Transformasi sesuai orientasi
-      switch (orientation) {
-        case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
-        case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
-        case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
-        case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
-        case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
-        case 7: ctx.transform(0, -1, -1, 0, height, width); break;
-        case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
-        default: break;
-      }
-      
-      ctx.drawImage(img, 0, 0);
-      return canvas.toDataURL('image/jpeg', 0.9); // kualitas tetap tinggi
-    }
-
-    // Reset form
     function resetForm() {
       namaInput.value = ''; jumlahInput.value = ''; satuanInput.value = ''; hargaInput.value = '';
       tanggalInput.value = new Date().toISOString().split('T')[0]; fotoInput.value = '';
     }
 
-    // Proses input file (kamera / manual) → simpan ke DB, dapatkan ID dan orientasi
     async function processPhotoFile(file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = async (ev) => {
           const dataUrl = ev.target.result;
-          // Dapatkan orientasi EXIF
           let orientation = 1;
           try {
             orientation = await new Promise((res) => {
@@ -374,7 +505,6 @@
             });
           } catch(e) {}
           
-          // Simpan foto asli ke IndexedDB
           const photoId = await savePhotoToDB(dataUrl, file.name, orientation);
           resolve({ photoId, name: file.name, orientation });
         };
@@ -382,7 +512,6 @@
       });
     }
 
-    // Tambah item
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const nama = namaInput.value.trim();
@@ -438,7 +567,6 @@
       }
     });
 
-    // WhatsApp
     function waMessage() {
       if (!items.length) return 'Daftar belanja material kosong.';
       let msg = `*DAFTAR BELANJA MATERIAL*\n${new Date().toLocaleDateString('id-ID')}\n========================\n`;
@@ -452,6 +580,7 @@
       msg += `========================\n*TOTAL: ${formatRupiah(total)}*`;
       return msg;
     }
+
     sendWaBtn.addEventListener('click', () => {
       const msg = waMessage();
       let nomor = waNumberInput.value.trim();
@@ -471,7 +600,6 @@
       else alert('Masukkan URL yang valid.');
     });
 
-    // Export Spreadsheet (tetap)
     async function exportToSheets() {
       if (!items.length) { alert('Tidak ada data.'); return; }
       if (!googleScriptUrl) { alert('Simpan URL dulu.'); return; }
@@ -499,7 +627,6 @@
     }
     exportSheetsBtn.addEventListener('click', exportToSheets);
 
-    // ========== EXPORT PDF (ORIGINAL QUALITY, ORIENTATION CORRECTED) ==========
     async function exportFotoKePdf() {
       const itemsWithFoto = items.filter(it => it.fotoId);
       if (itemsWithFoto.length === 0) { alert('Tidak ada foto.'); return; }
@@ -520,7 +647,6 @@
       const maxWidth = 180;
       const maxHeight = 140;
 
-      // Kelompokkan berdasarkan fotoId unik
       const fotoMap = new Map();
       for (let it of itemsWithFoto) {
         if (!fotoMap.has(it.fotoId)) {
@@ -539,7 +665,6 @@
         const entry = entries[idx];
         const photo = entry.photo;
         
-        // Ambil dataUrl yang sudah dirotasi
         const correctedUrl = await applyExifOrientation(photo.url, photo.orientation);
         const img = await new Promise((resolve) => {
           const image = new Image();
