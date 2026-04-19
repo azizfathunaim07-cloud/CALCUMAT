@@ -3,8 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-  <title>🧱 Belanja Material - PDF Foto Rasio Asli</title>
+  <title>🧱 Belanja Material - Storage IndexedDB & Rotasi Fix</title>
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- EXIF reader -->
+  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+  <!-- Dexie (IndexedDB wrapper) -->
+  <script src="https://unpkg.com/dexie@3.2.3/dist/dexie.js"></script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Roboto, sans-serif; }
     body { background: #f0f5fa; padding: 16px 12px; min-height: 100vh; display: flex; justify-content: center; }
@@ -48,7 +53,7 @@
 <body>
 <div class="app-container">
   <h1>🧱 Belanja Material</h1>
-  <div class="subhead">Simpan Lokal • WhatsApp Rapi • PDF Foto Rasio Asli</div>
+  <div class="subhead">IndexedDB • EXIF Rotasi • PDF Kualitas Asli</div>
 
   <!-- FORM INPUT -->
   <div class="card">
@@ -121,28 +126,97 @@
   (function(){
     "use strict";
 
-    // --- STATE ---
-    let items = [];
+    // ========== DATABASE INDEXEDDB ==========
+    const db = new Dexie('MaterialDB');
+    db.version(1).stores({
+      photos: '++id, url, name, orientation',  // foto asli disimpan di sini
+      items: 'id, nama, jumlah, satuan, harga, tanggal, fotoId, fotoName'  // referensi ke foto
+    });
+
+    // ========== STATE ==========
+    let items = [];               // array objek item dengan fotoId
     let nextId = 1000;
-    let savedPhoto = null;
+    let savedPhoto = null;        // { url, name, orientation }
     let useSavedPhoto = false;
     let googleScriptUrl = localStorage.getItem('gsUrl') || '';
 
-    function loadFromStorage() {
+    // Load dari IndexedDB & localStorage
+    async function loadData() {
       try {
-        const stored = localStorage.getItem('materialBelanja');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          items = parsed.items || [];
-          nextId = parsed.nextId || 1000;
+        // Load metadata dari localStorage (untuk nextId)
+        const meta = localStorage.getItem('materialMeta');
+        if (meta) {
+          const m = JSON.parse(meta);
+          nextId = m.nextId || 1000;
         }
-      } catch(e) {}
+        // Load items dari IndexedDB
+        const storedItems = await db.items.toArray();
+        items = storedItems.map(it => ({
+          id: it.id,
+          nama: it.nama,
+          jumlah: it.jumlah,
+          satuan: it.satuan,
+          harga: it.harga,
+          tanggal: it.tanggal,
+          fotoId: it.fotoId,
+          fotoName: it.fotoName
+        }));
+      } catch(e) {
+        console.warn('Gagal load data', e);
+        items = [];
+      }
+      renderList();
     }
-    function saveToStorage() {
-      try { localStorage.setItem('materialBelanja', JSON.stringify({ items, nextId })); } catch(e) {}
-    }
-    loadFromStorage();
 
+    async function saveMeta() {
+      localStorage.setItem('materialMeta', JSON.stringify({ nextId }));
+    }
+
+    // Simpan foto ke IndexedDB, kembalikan ID
+    async function savePhotoToDB(url, name, orientation = 1) {
+      const id = await db.photos.add({ url, name, orientation });
+      return id;
+    }
+
+    // Ambil data foto dari DB (termasuk url asli)
+    async function getPhotoFromDB(photoId) {
+      if (!photoId) return null;
+      return await db.photos.get(photoId);
+    }
+
+    // Hapus foto jika tidak ada item yang merujuk
+    async function cleanupOrphanPhotos() {
+      const usedPhotoIds = new Set(items.map(it => it.fotoId).filter(id => id !== null));
+      const allPhotos = await db.photos.toArray();
+      for (let p of allPhotos) {
+        if (!usedPhotoIds.has(p.id)) {
+          await db.photos.delete(p.id);
+        }
+      }
+    }
+
+    // Simpan item ke DB
+    async function saveItemsToDB() {
+      await db.items.clear();
+      await db.items.bulkAdd(items.map(it => ({
+        id: it.id,
+        nama: it.nama,
+        jumlah: it.jumlah,
+        satuan: it.satuan,
+        harga: it.harga,
+        tanggal: it.tanggal,
+        fotoId: it.fotoId,
+        fotoName: it.fotoName
+      })));
+    }
+
+    async function fullSave() {
+      await saveItemsToDB();
+      await cleanupOrphanPhotos();
+      await saveMeta();
+    }
+
+    // ========== UI Elements ==========
     const form = document.getElementById('materialForm');
     const namaInput = document.getElementById('nama');
     const jumlahInput = document.getElementById('jumlah');
@@ -167,54 +241,147 @@
     tanggalInput.value = new Date().toISOString().split('T')[0];
     scriptUrlInput.value = googleScriptUrl;
 
+    // Helper
     function formatRupiah(n) { return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
     function calcTotal(j,h) { return (parseFloat(j)||0)*(parseFloat(h)||0); }
     function escapeHtml(t) { if(!t) return t; const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
     function showToast(m) { const t=document.getElementById('toast'); t.textContent=m; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,2000); }
 
-    function renderList() {
+    // Render tabel dengan thumbnail (ambil foto dari DB secara asynchronous)
+    async function renderList() {
       if(!items.length) {
         listBody.innerHTML = ''; emptyMessage.style.display = 'block'; totalDisplay.textContent = formatRupiah(0);
         return;
       }
       emptyMessage.style.display = 'none';
-      let html = '', grand = 0;
-      items.forEach((it, i) => {
-        const tot = calcTotal(it.jumlah, it.harga); grand += tot;
-        let fotoHtml = it.fotoURL ? `<img src="${it.fotoURL}" class="foto-thumb">` : `<span class="no-foto">📷 ${it.fotoName||'tanpa'}</span>`;
-        html += `<tr data-id="${it.id}"><td>${i+1}</td><td><strong>${escapeHtml(it.nama)}</strong></td><td>${it.jumlah}</td><td>${escapeHtml(it.satuan)}</td><td>${formatRupiah(it.harga)}</td><td><strong>${formatRupiah(tot)}</strong></td><td>${it.tanggal}</td><td style="text-align:center">${fotoHtml}</td><td><button class="btn-delete" data-id="${it.id}">🗑️</button></td></tr>`;
-      });
-      listBody.innerHTML = html;
+      
+      // Siapkan array promise untuk mengambil thumbnail
+      const rows = await Promise.all(items.map(async (it, i) => {
+        const tot = calcTotal(it.jumlah, it.harga);
+        let fotoHtml = '';
+        if (it.fotoId) {
+          const photo = await getPhotoFromDB(it.fotoId);
+          if (photo && photo.url) {
+            // Buat thumbnail dengan orientasi yang sudah diperbaiki
+            const correctedUrl = await applyExifOrientation(photo.url, photo.orientation);
+            fotoHtml = `<img src="${correctedUrl}" class="foto-thumb">`;
+          } else {
+            fotoHtml = `<span class="no-foto">📷 ${it.fotoName||'tanpa'}</span>`;
+          }
+        } else {
+          fotoHtml = `<span class="no-foto">📷 ${it.fotoName||'tanpa'}</span>`;
+        }
+        return `<tr data-id="${it.id}">
+          <td>${i+1}</td>
+          <td><strong>${escapeHtml(it.nama)}</strong></td>
+          <td>${it.jumlah}</td>
+          <td>${escapeHtml(it.satuan)}</td>
+          <td>${formatRupiah(it.harga)}</td>
+          <td><strong>${formatRupiah(tot)}</strong></td>
+          <td>${it.tanggal}</td>
+          <td style="text-align:center">${fotoHtml}</td>
+          <td><button class="btn-delete" data-id="${it.id}">🗑️</button></td>
+        </tr>`;
+      }));
+
+      let grand = 0;
+      items.forEach(it => grand += calcTotal(it.jumlah, it.harga));
+      
+      listBody.innerHTML = rows.join('');
       totalDisplay.textContent = formatRupiah(grand);
+      
       document.querySelectorAll('.btn-delete').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           items = items.filter(it => it.id !== btn.dataset.id);
-          saveToStorage(); renderList(); showToast('Item dihapus');
+          await fullSave();
+          renderList();
+          showToast('Item dihapus');
         });
       });
     }
 
+    // Fungsi untuk membaca EXIF dan mengembalikan dataURL yang sudah dirotasi
+    function applyExifOrientation(dataUrl, knownOrientation = null) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          // Jika orientasi sudah diketahui (dari input sebelumnya), gunakan itu
+          if (knownOrientation && knownOrientation !== 1) {
+            resolve(rotateImage(img, knownOrientation));
+            return;
+          }
+          // Baca EXIF
+          EXIF.getData(img, function() {
+            const orientation = EXIF.getTag(this, 'Orientation') || 1;
+            resolve(rotateImage(img, orientation));
+          });
+        };
+        img.src = dataUrl;
+      });
+    }
+
+    function rotateImage(img, orientation) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let width = img.width;
+      let height = img.height;
+      
+      // Tentukan dimensi canvas berdasarkan orientasi
+      if (orientation >= 5 && orientation <= 8) {
+        canvas.width = height;
+        canvas.height = width;
+      } else {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      
+      // Transformasi sesuai orientasi
+      switch (orientation) {
+        case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
+        case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
+        case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
+        case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+        case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
+        case 7: ctx.transform(0, -1, -1, 0, height, width); break;
+        case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
+        default: break;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.9); // kualitas tetap tinggi
+    }
+
+    // Reset form
     function resetForm() {
       namaInput.value = ''; jumlahInput.value = ''; satuanInput.value = ''; hargaInput.value = '';
       tanggalInput.value = new Date().toISOString().split('T')[0]; fotoInput.value = '';
     }
 
-    function getPhotoForNewItem() {
+    // Proses input file (kamera / manual) → simpan ke DB, dapatkan ID dan orientasi
+    async function processPhotoFile(file) {
       return new Promise((resolve) => {
-        if (useSavedPhoto && savedPhoto) { resolve({ url: savedPhoto.url, name: savedPhoto.name }); return; }
-        const file = fotoInput.files[0];
-        if (!file) { resolve({ url: null, name: null }); return; }
         const reader = new FileReader();
-        reader.onload = ev => {
-          const data = { url: ev.target.result, name: file.name };
-          if (useSamePhotoCheck.checked) { savedPhoto = data; useSavedPhoto = true; }
-          resolve(data);
+        reader.onload = async (ev) => {
+          const dataUrl = ev.target.result;
+          // Dapatkan orientasi EXIF
+          let orientation = 1;
+          try {
+            orientation = await new Promise((res) => {
+              EXIF.getData({ src: dataUrl }, function() {
+                res(EXIF.getTag(this, 'Orientation') || 1);
+              });
+            });
+          } catch(e) {}
+          
+          // Simpan foto asli ke IndexedDB
+          const photoId = await savePhotoToDB(dataUrl, file.name, orientation);
+          resolve({ photoId, name: file.name, orientation });
         };
-        reader.onerror = () => resolve({ url: null, name: file.name });
         reader.readAsDataURL(file);
       });
     }
 
+    // Tambah item
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const nama = namaInput.value.trim();
@@ -225,9 +392,34 @@
       if (!nama || isNaN(jumlah) || jumlah<=0 || !satuan || isNaN(harga) || harga<0 || !tanggal) {
         alert('Isi semua field dengan benar.'); return;
       }
-      const fotoData = await getPhotoForNewItem();
-      items.push({ id: String(nextId++), nama, jumlah, satuan, harga, tanggal, fotoURL: fotoData.url, fotoName: fotoData.name });
-      saveToStorage(); renderList(); resetForm();
+
+      let fotoId = null, fotoName = null;
+      
+      if (useSavedPhoto && savedPhoto) {
+        fotoId = savedPhoto.id;
+        fotoName = savedPhoto.name;
+      } else {
+        const file = fotoInput.files[0];
+        if (file) {
+          const result = await processPhotoFile(file);
+          fotoId = result.photoId;
+          fotoName = result.name;
+          if (useSamePhotoCheck.checked) {
+            savedPhoto = { id: fotoId, name: fotoName };
+            useSavedPhoto = true;
+          }
+        }
+      }
+
+      items.push({
+        id: String(nextId++),
+        nama, jumlah, satuan, harga, tanggal,
+        fotoId, fotoName
+      });
+
+      await fullSave();
+      renderList();
+      resetForm();
       useSamePhotoCheck.checked = useSavedPhoto;
       showToast('Material ditambahkan');
     });
@@ -236,8 +428,13 @@
       savedPhoto = null; useSavedPhoto = false; useSamePhotoCheck.checked = false; fotoInput.value = ''; showToast('Foto tersimpan direset');
     });
 
-    clearAllBtn.addEventListener('click', () => {
-      if (items.length && confirm('Hapus semua material?')) { items = []; saveToStorage(); renderList(); showToast('Semua data dihapus'); }
+    clearAllBtn.addEventListener('click', async () => {
+      if (items.length && confirm('Hapus semua material?')) {
+        items = [];
+        await fullSave();
+        renderList();
+        showToast('Semua data dihapus');
+      }
     });
 
     // WhatsApp
@@ -273,7 +470,7 @@
       else alert('Masukkan URL yang valid.');
     });
 
-    // Export Spreadsheet
+    // Export Spreadsheet (tetap)
     async function exportToSheets() {
       if (!items.length) { alert('Tidak ada data.'); return; }
       if (!googleScriptUrl) { alert('Simpan URL dulu.'); return; }
@@ -301,23 +498,10 @@
     }
     exportSheetsBtn.addEventListener('click', exportToSheets);
 
-    // ========== EXPORT FOTO KE PDF (RASIO ASLI, TIDAK LONJONG) ==========
+    // ========== EXPORT PDF (ORIGINAL QUALITY, ORIENTATION CORRECTED) ==========
     async function exportFotoKePdf() {
-      // Kelompokkan berdasarkan fotoURL unik
-      const fotoMap = new Map();
-      items.forEach(it => {
-        if (it.fotoURL && it.fotoURL.startsWith('data:image')) {
-          if (!fotoMap.has(it.fotoURL)) {
-            fotoMap.set(it.fotoURL, { url: it.fotoURL, name: it.fotoName, items: [] });
-          }
-          fotoMap.get(it.fotoURL).items.push(it);
-        }
-      });
-
-      if (fotoMap.size === 0) {
-        alert('Tidak ada foto untuk diekspor ke PDF.');
-        return;
-      }
+      const itemsWithFoto = items.filter(it => it.fotoId);
+      if (itemsWithFoto.length === 0) { alert('Tidak ada foto.'); return; }
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -332,58 +516,54 @@
       let y = 40;
       const pageWidth = 210;
       const margin = 15;
-      const maxWidth = pageWidth - 2 * margin; // 180 mm
-      const maxHeight = 140; // batas tinggi gambar (bisa disesuaikan)
+      const maxWidth = 180;
+      const maxHeight = 140;
+
+      // Kelompokkan berdasarkan fotoId unik
+      const fotoMap = new Map();
+      for (let it of itemsWithFoto) {
+        if (!fotoMap.has(it.fotoId)) {
+          const photo = await getPhotoFromDB(it.fotoId);
+          if (photo) {
+            fotoMap.set(it.fotoId, { photo, items: [] });
+          }
+        }
+        if (fotoMap.has(it.fotoId)) {
+          fotoMap.get(it.fotoId).items.push(it);
+        }
+      }
 
       const entries = Array.from(fotoMap.values());
-      
       for (let idx = 0; idx < entries.length; idx++) {
         const entry = entries[idx];
+        const photo = entry.photo;
         
-        // Muat gambar
-        const img = await new Promise((resolve, reject) => {
+        // Ambil dataUrl yang sudah dirotasi
+        const correctedUrl = await applyExifOrientation(photo.url, photo.orientation);
+        const img = await new Promise((resolve) => {
           const image = new Image();
           image.onload = () => resolve(image);
-          image.onerror = reject;
-          image.src = entry.url;
+          image.src = correctedUrl;
         });
 
-        // Dapatkan dimensi asli (pixel)
-        const imgWidthPx = img.width;
-        const imgHeightPx = img.height;
-        
-        // Hitung ukuran di PDF (mm) dengan mempertahankan rasio
-        // Anggap 1 px ≈ 0.264583 mm (konversi standar 96 DPI)
         const pxToMm = 0.264583;
-        let w = imgWidthPx * pxToMm;
-        let h = imgHeightPx * pxToMm;
-        
-        // Skala agar tidak melebihi batas maksimal
-        const scale = Math.min(maxWidth / w, maxHeight / h, 1); // jangan perbesar jika lebih kecil
-        w *= scale;
-        h *= scale;
-        
-        // Hitung posisi X agar tengah
+        let w = img.width * pxToMm;
+        let h = img.height * pxToMm;
+        const scale = Math.min(maxWidth / w, maxHeight / h, 1);
+        w *= scale; h *= scale;
         const x = (pageWidth - w) / 2;
         
-        // Periksa sisa ruang halaman
         const neededHeight = h + 10 + (entry.items.length * 10) + 15;
-        if (y + neededHeight > 280) {
-          doc.addPage();
-          y = 20;
-        }
+        if (y + neededHeight > 280) { doc.addPage(); y = 20; }
 
-        // Tambahkan gambar ke PDF
-        doc.addImage(img, 'JPEG', x, y, w, h);
+        doc.addImage(correctedUrl, 'JPEG', x, y, w, h);
         y += h + 5;
 
-        // Info file
         doc.setFontSize(9);
         doc.setTextColor(60);
-        doc.text(`File: ${entry.name || 'tanpa nama'}`, margin, y);
+        doc.text(`File: ${photo.name || 'tanpa nama'}`, margin, y);
         y += 5;
 
-        // Daftar material yang menggunakan foto ini
         doc.setFontSize(8);
         doc.setTextColor(40);
         entry.items.forEach((item, i) => {
@@ -392,9 +572,7 @@
           doc.text(line, margin, y);
           y += 4;
         });
-
         y += 8;
-        // Garis pemisah (kecuali terakhir)
         if (idx < entries.length - 1) {
           doc.setDrawColor(200);
           doc.line(margin, y-3, pageWidth - margin, y-3);
@@ -409,10 +587,11 @@
     }
 
     exportFotoPdfBtn.addEventListener('click', () => {
-      exportFotoKePdf().catch(err => alert('Gagal membuat PDF: ' + err.message));
+      exportFotoKePdf().catch(err => alert('Gagal PDF: ' + err.message));
     });
 
-    renderList();
+    // ========== START ==========
+    loadData();
   })();
 </script>
 </body>
