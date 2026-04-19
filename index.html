@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-  <title>🧱 Belanja Material - WA Rapi & PDF Foto</title>
+  <title>🧱 Belanja Material - PDF Foto Rasio Asli</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Roboto, sans-serif; }
@@ -48,8 +48,7 @@
 <body>
 <div class="app-container">
   <h1>🧱 Belanja Material</h1>
-  <div class="subhead">by. Aziz Fathunaim</div>
-  <div class="subhead">https://script.google.com/macros/s/AKfycbyrQsCyL9xZFR3HQXzqlie5uMU57yjQ0gqb9QpQPz6aM9TaTvHBJPfkbehZJgVHC0puWg/exec</div>
+  <div class="subhead">Simpan Lokal • WhatsApp Rapi • PDF Foto Rasio Asli</div>
 
   <!-- FORM INPUT -->
   <div class="card">
@@ -241,7 +240,7 @@
       if (items.length && confirm('Hapus semua material?')) { items = []; saveToStorage(); renderList(); showToast('Semua data dihapus'); }
     });
 
-    // ========== WHATSAPP RAPI ==========
+    // WhatsApp
     function waMessage() {
       if (!items.length) return 'Daftar belanja material kosong.';
       let msg = `*DAFTAR BELANJA MATERIAL*\n${new Date().toLocaleDateString('id-ID')}\n========================\n`;
@@ -274,7 +273,7 @@
       else alert('Masukkan URL yang valid.');
     });
 
-    // ========== EXPORT SPREADSHEET ==========
+    // Export Spreadsheet
     async function exportToSheets() {
       if (!items.length) { alert('Tidak ada data.'); return; }
       if (!googleScriptUrl) { alert('Simpan URL dulu.'); return; }
@@ -302,9 +301,9 @@
     }
     exportSheetsBtn.addEventListener('click', exportToSheets);
 
-    // ========== EXPORT FOTO KE PDF (UNIK & DATA LENGKAP) ==========
+    // ========== EXPORT FOTO KE PDF (RASIO ASLI, TIDAK LONJONG) ==========
     async function exportFotoKePdf() {
-      // Kelompokkan item berdasarkan fotoURL (hanya yang memiliki foto)
+      // Kelompokkan berdasarkan fotoURL unik
       const fotoMap = new Map();
       items.forEach(it => {
         if (it.fotoURL && it.fotoURL.startsWith('data:image')) {
@@ -333,8 +332,8 @@
       let y = 40;
       const pageWidth = 210;
       const margin = 15;
-      const maxImgWidth = pageWidth - 2 * margin;
-      const maxImgHeight = 120;
+      const maxWidth = pageWidth - 2 * margin; // 180 mm
+      const maxHeight = 140; // batas tinggi gambar (bisa disesuaikan)
 
       const entries = Array.from(fotoMap.values());
       
@@ -349,20 +348,32 @@
           image.src = entry.url;
         });
 
-        // Hitung dimensi proporsional
-        let w = img.width, h = img.height;
-        const ratio = w / h;
-        if (w > maxImgWidth) { w = maxImgWidth; h = w / ratio; }
-        if (h > maxImgHeight) { h = maxImgHeight; w = h * ratio; }
-
-        // Cek sisa halaman
-        const neededHeight = h + 10 + (entry.items.length * 12) + 15;
+        // Dapatkan dimensi asli (pixel)
+        const imgWidthPx = img.width;
+        const imgHeightPx = img.height;
+        
+        // Hitung ukuran di PDF (mm) dengan mempertahankan rasio
+        // Anggap 1 px ≈ 0.264583 mm (konversi standar 96 DPI)
+        const pxToMm = 0.264583;
+        let w = imgWidthPx * pxToMm;
+        let h = imgHeightPx * pxToMm;
+        
+        // Skala agar tidak melebihi batas maksimal
+        const scale = Math.min(maxWidth / w, maxHeight / h, 1); // jangan perbesar jika lebih kecil
+        w *= scale;
+        h *= scale;
+        
+        // Hitung posisi X agar tengah
+        const x = (pageWidth - w) / 2;
+        
+        // Periksa sisa ruang halaman
+        const neededHeight = h + 10 + (entry.items.length * 10) + 15;
         if (y + neededHeight > 280) {
           doc.addPage();
           y = 20;
         }
 
-        const x = (pageWidth - w) / 2;
+        // Tambahkan gambar ke PDF
         doc.addImage(img, 'JPEG', x, y, w, h);
         y += h + 5;
 
@@ -372,7 +383,7 @@
         doc.text(`File: ${entry.name || 'tanpa nama'}`, margin, y);
         y += 5;
 
-        // Data material yang menggunakan foto ini
+        // Daftar material yang menggunakan foto ini
         doc.setFontSize(8);
         doc.setTextColor(40);
         entry.items.forEach((item, i) => {
