@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>🧱 Belanja Material - WA Rapi & PDF Foto</title>
+  <!-- jsPDF untuk PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Roboto, sans-serif; }
+    body { background: #f0f5fa; padding: 16px 12px; min-height: 100vh; display: flex; justify-content: center; }
+    .app-container { max-width: 1300px; width: 100%; }
+    h1 { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 2rem; color: #1a3e60; margin-bottom: 8px; }
+    .subhead { color: #2c3e50; margin-bottom: 20px; padding-left: 10px; font-weight: 400; border-left: 6px solid #f4b942; }
+    .card { background: #fff; border-radius: 28px; padding: 24px 22px; margin-bottom: 28px; box-shadow: 0 15px 30px rgba(0,20,40,0.08); border: 1px solid rgba(60,110,180,0.1); }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px 20px; align-items: end; }
+    .input-group { display: flex; flex-direction: column; gap: 6px; }
+    .input-group label { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.3px; color: #1f4e7a; }
+    .input-group input { padding: 12px 14px; border: 1.5px solid #dce5ec; border-radius: 18px; font-size: 0.95rem; background: #fafcff; outline: none; }
+    .input-group input:focus { border-color: #2a6eb0; box-shadow: 0 0 0 3px rgba(42,110,176,0.1); background: white; }
+    .foto-options { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+    .foto-options label { display: flex; align-items: center; gap: 5px; font-weight: normal; text-transform: none; color: #1e3a5f; }
+    .btn-add { background: #1e4a7a; color: white; border: none; padding: 15px 28px; border-radius: 50px; font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; grid-column: 1 / -1; margin-top: 15px; }
+    .btn-add:hover { background: #0e3552; }
+    .table-wrapper { overflow-x: auto; margin: 10px 0; border-radius: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 1100px; white-space: nowrap; }
+    th { background: #1e3a5f; color: white; font-weight: 600; padding: 15px 10px; text-align: left; }
+    td { padding: 14px 10px; border-bottom: 1px solid #dde7f0; background: white; }
+    .foto-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 12px; border: 1.5px solid #bdd3e8; background: #f0f6fe; }
+    .no-foto { font-size: 0.75rem; color: #5f6f80; background: #e9f0f7; padding: 6px 10px; border-radius: 20px; }
+    .btn-delete { background: #fff5f5; border: 1.5px solid #f3b8b0; color: #b53b2e; font-weight: bold; padding: 8px 14px; border-radius: 30px; cursor: pointer; }
+    .btn-delete:hover { background: #d93c2f; color: white; }
+    .summary-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+    .total-text { font-size: 1.6rem; font-weight: 700; color: #1a3b5c; }
+    .total-amount { background: #1e3a5f; color: white; padding: 12px 32px; border-radius: 60px; font-size: 1.9rem; font-weight: 800; }
+    .action-buttons { display: flex; gap: 12px; margin-top: 25px; flex-wrap: wrap; }
+    .btn-wa, .btn-sheets, .btn-pdf { padding: 15px 20px; border-radius: 60px; font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1 0 150px; justify-content: center; border: none; }
+    .btn-wa { background: #25D366; color: #0c331c; }
+    .btn-sheets { background: #0F9D58; color: white; }
+    .btn-pdf { background: #c0392b; color: white; }
+    .btn-secondary { background: #eef3f9; border: 1px solid #b0c4de; color: #1e3a5f; padding: 12px 24px; border-radius: 40px; font-weight: 600; cursor: pointer; }
+    .wa-section, .url-section { display: flex; flex-wrap: wrap; align-items: center; gap: 15px; margin-top: 25px; background: #e8f0fa; padding: 16px 22px; border-radius: 50px; }
+    .wa-input, .url-input { flex: 2 1 220px; padding: 15px 20px; border: 1.5px solid #cbd5e1; border-radius: 40px; font-size: 1rem; background: white; }
+    .empty-message { text-align: center; padding: 40px; color: #6a7e94; }
+    .info-note { margin-top: 10px; font-size: 0.8rem; color: #4a627a; background: #eef3f9; padding: 8px 16px; border-radius: 30px; }
+    .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 24px; border-radius: 40px; opacity: 0; transition: 0.2s; z-index: 1000; }
+  </style>
+</head>
+<body>
+<div class="app-container">
+  <h1>🧱 Belanja Material</h1>
+  <div class="subhead">by. Aziz fathunaim</div>
+  <div class="subhead">https://script.google.com/macros/s/AKfycbyrQsCyL9xZFR3HQXzqlie5uMU57yjQ0gqb9QpQPz6aM9TaTvHBJPfkbehZJgVHC0puWg/exec</div>
+
+  <!-- FORM INPUT -->
+  <div class="card">
+    <div style="margin-bottom:15px; font-weight:700; color:#1e3a5f;">➕ Tambah Material</div>
+    <form id="materialForm">
+      <div class="form-grid">
+        <div class="input-group">
+          <label>📦 Nama</label>
+          <input type="text" id="nama" placeholder="Semen Tiga Roda" required>
+        </div>
+        <div class="input-group">
+          <label>🔢 Jumlah</label>
+          <input type="number" id="jumlah" placeholder="0" min="0.01" step="0.01" required>
+        </div>
+        <div class="input-group">
+          <label>📏 Satuan</label>
+          <input type="text" id="satuan" placeholder="contoh: sak, kg, batang" required>
+        </div>
+        <div class="input-group">
+          <label>💰 Harga (Rp)</label>
+          <input type="number" id="harga" placeholder="0" min="0" step="0.01" required>
+        </div>
+        <div class="input-group">
+          <label>📅 Tanggal</label>
+          <input type="date" id="tanggal" required>
+        </div>
+        <div class="input-group">
+          <label>📸 Foto Nota</label>
+          <input type="file" id="fotoNota" accept="image/*" capture="environment">
+          <div class="foto-options">
+            <label><input type="checkbox" id="useSamePhoto"> Gunakan foto ini untuk input berikutnya</label>
+            <button type="button" id="clearSavedPhoto" style="background:none;border:none;color:#c0392b;text-decoration:underline;cursor:pointer;font-size:0.8rem;">Reset</button>
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn-add">➕ Tambahkan</button>
+    </form>
+    <div class="info-note">⚡ Centang "Gunakan foto ini..." agar foto dipakai berulang.</div>
+  </div>
+
+  <!-- DAFTAR BELANJA -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+      <h2 style="color:#1e3a5f;">📋 Daftar Belanja</h2>
+      <button id="clearAllBtn" class="btn-secondary">🗑️ Hapus Semua</button>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>No</th><th>Nama</th><th>Jumlah</th><th>Satuan</th><th>Harga</th><th>Total</th><th>Tanggal</th><th>Foto</th><th>Aksi</th></tr>
+        </thead>
+        <tbody id="listBody"></tbody>
+      </table>
+    </div>
+    <div id="emptyRowMessage" class="empty-message">🛒 Belum ada material. Silakan tambahkan.</div>
+
+    <div class="summary-bar">
+      <div class="total-text">Total</div>
+      <div class="total-amount" id="totalDisplay">Rp 0</div>
+    </div>
+
+    <!-- URL GOOGLE APPS SCRIPT -->
+    <div class="url-section">
+      <span style="font-weight:600;">🔗 URL Script</span>
+      <input type="text" id="scriptUrlInput" class="url-input" placeholder="https://script.google.com/macros/s/.../exec">
+      <button id="saveUrlBtn" class="btn-secondary" style="padding:12px 20px;">💾 Simpan URL</button>
+    </div>
+    <div id="statusApi" style="margin: 10px 0 0 15px; font-size:0.9rem; color:#2c3e50;"></div>
+
+    <div class="action-buttons">
+      <button id="exportSheetsBtn" class="btn-sheets">📊 Export ke Spreadsheet</button>
+      <button id="exportFotoPdfBtn" class="btn-pdf">🖼️ Export Foto ke PDF</button>
+    </div>
+
+    <!-- WHATSAPP -->
+    <div class="wa-section">
+      <span style="font-weight:600;">📲 Nomor WA</span>
+      <input type="tel" id="waNumberInput" class="wa-input" placeholder="628123456789 (opsional)">
+      <button id="sendWaBtn" class="btn-wa">💬 Kirim Teks WA</button>
+      <span style="font-size:0.8rem;">*kosongkan untuk pilih kontak</span>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast">✔️ Tersimpan</div>
+
+<script>
+  (function(){
+    "use strict";
+
+    // --- STATE (localStorage) ---
+    let items = [];
+    let nextId = 1000;
+    let savedPhoto = null;
+    let useSavedPhoto = false;
+    let googleScriptUrl = localStorage.getItem('gsUrl') || '';
+
+    function loadFromStorage() {
+      try {
+        const stored = localStorage.getItem('materialBelanja');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          items = parsed.items || [];
+          nextId = parsed.nextId || 1000;
+        }
+      } catch(e) {}
+    }
+    function saveToStorage() {
+      try {
+        localStorage.setItem('materialBelanja', JSON.stringify({ items, nextId }));
+      } catch(e) {}
+    }
+    loadFromStorage();
+
+    const form = document.getElementById('materialForm');
+    const namaInput = document.getElementById('nama');
+    const jumlahInput = document.getElementById('jumlah');
+    const satuanInput = document.getElementById('satuan');
+    const hargaInput = document.getElementById('harga');
+    const tanggalInput = document.getElementById('tanggal');
+    const fotoInput = document.getElementById('fotoNota');
+    const useSamePhotoCheck = document.getElementById('useSamePhoto');
+    const clearSavedPhotoBtn = document.getElementById('clearSavedPhoto');
+    const listBody = document.getElementById('listBody');
+    const emptyMessage = document.getElementById('emptyRowMessage');
+    const totalDisplay = document.getElementById('totalDisplay');
+    const clearAllBtn = document.getElementById('clearAllBtn');
+    const sendWaBtn = document.getElementById('sendWaBtn');
+    const waNumberInput = document.getElementById('waNumberInput');
+    const exportSheetsBtn = document.getElementById('exportSheetsBtn');
+    const scriptUrlInput = document.getElementById('scriptUrlInput');
+    const saveUrlBtn = document.getElementById('saveUrlBtn');
+    const statusApi = document.getElementById('statusApi');
+    const exportFotoPdfBtn = document.getElementById('exportFotoPdfBtn');
+
+    tanggalInput.value = new Date().toISOString().split('T')[0];
+    scriptUrlInput.value = googleScriptUrl;
+
+    function formatRupiah(n) { return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
+    function calcTotal(j,h) { return (parseFloat(j)||0)*(parseFloat(h)||0); }
+    function escapeHtml(t) { if(!t) return t; const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+    function showToast(m) { const t=document.getElementById('toast'); t.textContent=m; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,2000); }
+
+    function renderList() {
+      if(!items.length) {
+        listBody.innerHTML = ''; emptyMessage.style.display = 'block'; totalDisplay.textContent = formatRupiah(0);
+        return;
+      }
+      emptyMessage.style.display = 'none';
+      let html = '', grand = 0;
+      items.forEach((it, i) => {
+        const tot = calcTotal(it.jumlah, it.harga); grand += tot;
+        let fotoHtml = it.fotoURL ? `<img src="${it.fotoURL}" class="foto-thumb">` : `<span class="no-foto">📷 ${it.fotoName||'tanpa'}</span>`;
+        html += `<tr data-id="${it.id}"><td>${i+1}</td><td><strong>${escapeHtml(it.nama)}</strong></td><td>${it.jumlah}</td><td>${escapeHtml(it.satuan)}</td><td>${formatRupiah(it.harga)}</td><td><strong>${formatRupiah(tot)}</strong></td><td>${it.tanggal}</td><td style="text-align:center">${fotoHtml}</td><td><button class="btn-delete" data-id="${it.id}">🗑️</button></td></tr>`;
+      });
+      listBody.innerHTML = html;
+      totalDisplay.textContent = formatRupiah(grand);
+      document.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          items = items.filter(it => it.id !== btn.dataset.id);
+          saveToStorage(); renderList(); showToast('Item dihapus');
+        });
+      });
+    }
+
+    function resetForm() {
+      namaInput.value = ''; jumlahInput.value = ''; satuanInput.value = ''; hargaInput.value = '';
+      tanggalInput.value = new Date().toISOString().split('T')[0]; fotoInput.value = '';
+    }
+
+    function getPhotoForNewItem() {
+      return new Promise((resolve) => {
+        if (useSavedPhoto && savedPhoto) { resolve({ url: savedPhoto.url, name: savedPhoto.name }); return; }
+        const file = fotoInput.files[0];
+        if (!file) { resolve({ url: null, name: null }); return; }
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const data = { url: ev.target.result, name: file.name };
+          if (useSamePhotoCheck.checked) { savedPhoto = data; useSavedPhoto = true; }
+          resolve(data);
+        };
+        reader.onerror = () => resolve({ url: null, name: file.name });
+        reader.readAsDataURL(file);
+      });
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nama = namaInput.value.trim();
+      const jumlah = parseFloat(jumlahInput.value);
+      const satuan = satuanInput.value.trim();
+      const harga = parseFloat(hargaInput.value);
+      const tanggal = tanggalInput.value;
+      if (!nama || isNaN(jumlah) || jumlah<=0 || !satuan || isNaN(harga) || harga<0 || !tanggal) {
+        alert('Isi semua field dengan benar.'); return;
+      }
+      const fotoData = await getPhotoForNewItem();
+      items.push({ id: String(nextId++), nama, jumlah, satuan, harga, tanggal, fotoURL: fotoData.url, fotoName: fotoData.name });
+      saveToStorage(); renderList(); resetForm();
+      useSamePhotoCheck.checked = useSavedPhoto;
+      showToast('Material ditambahkan');
+    });
+
+    clearSavedPhotoBtn.addEventListener('click', () => {
+      savedPhoto = null; useSavedPhoto = false; useSamePhotoCheck.checked = false; fotoInput.value = ''; showToast('Foto tersimpan direset');
+    });
+
+    clearAllBtn.addEventListener('click', () => {
+      if (items.length && confirm('Hapus semua material?')) { items = []; saveToStorage(); renderList(); showToast('Semua data dihapus'); }
+    });
+
+    // ========== WHATSAPP (ikon rapi, tanpa tanda tanya) ==========
+    function waMessage() {
+      if (!items.length) return 'Daftar belanja material kosong.';
+      let msg = `*DAFTAR BELANJA MATERIAL*\n${new Date().toLocaleDateString('id-ID')}\n========================\n`;
+      let total = 0;
+      items.forEach((it,i) => {
+        const sub = calcTotal(it.jumlah, it.harga); total += sub;
+        msg += `${i+1}. ${it.nama} — ${it.jumlah} ${it.satuan} x ${formatRupiah(it.harga)} = ${formatRupiah(sub)}\n   Tgl: ${it.tanggal}`;
+        if (it.fotoName) msg += ` | Foto: ${it.fotoName}`;
+        msg += '\n\n';
+      });
+      msg += `========================\n*TOTAL: ${formatRupiah(total)}*`;
+      return msg;
+    }
+    sendWaBtn.addEventListener('click', () => {
+      const msg = waMessage();
+      let nomor = waNumberInput.value.trim();
+      let url;
+      if (!nomor) url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      else {
+        let clean = nomor.replace(/[^\d+]/g,''); if (clean.startsWith('+')) clean = clean.slice(1);
+        if (clean.startsWith('0')) clean = '62' + clean.slice(1); if (!clean.startsWith('62')) clean = '62' + clean;
+        url = `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
+      }
+      window.open(url, '_blank');
+    });
+
+    // Simpan URL
+    saveUrlBtn.addEventListener('click', () => {
+      const url = scriptUrlInput.value.trim();
+      if (url) { googleScriptUrl = url; localStorage.setItem('gsUrl', url); showToast('URL disimpan'); }
+      else alert('Masukkan URL yang valid.');
+    });
+
+    // ========== EXPORT KE SPREADSHEET ==========
+    async function exportToSheets() {
+      if (!items.length) { alert('Tidak ada data.'); return; }
+      if (!googleScriptUrl) { alert('Simpan URL dulu.'); return; }
+      statusApi.innerText = 'Mengirim...';
+      let ok = 0, fail = 0;
+      const ts = new Date().toISOString();
+      const tglExp = new Date().toLocaleDateString('id-ID');
+
+      for (let it of items) {
+        const payload = {
+          timestamp: ts, tanggalExport: tglExp, namaMaterial: it.nama, jumlah: it.jumlah,
+          satuan: it.satuan, hargaSatuan: it.harga, totalHarga: calcTotal(it.jumlah, it.harga),
+          tanggalBeli: it.tanggal, fotoNota: it.fotoName || ''
+        };
+        try {
+          await fetch(googleScriptUrl, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(payload)
+          });
+          ok++;
+        } catch(e) { fail++; }
+      }
+      statusApi.innerText = `✅ ${ok} berhasil, ❌ ${fail} gagal.`;
+      if (ok) showToast('Data diekspor ke spreadsheet');
+    }
+    exportSheetsBtn.addEventListener('click', exportToSheets);
+
+    // ========== EXPORT FOTO KE PDF (HANYA FOTO + NAMA FILE) ==========
+    async function exportFotoKePdf() {
+      const itemsWithFoto = items.filter(it => it.fotoURL && it.fotoURL.startsWith('data:image'));
+      if (itemsWithFoto.length === 0) {
+        alert('Tidak ada foto untuk diekspor ke PDF.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      
+      // Judul
+      doc.setFontSize(16);
+      doc.setTextColor(30, 58, 95);
+      doc.text('KOLEKSI FOTO NOTA', 15, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      doc.text(`Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 15, 28);
+      
+      let y = 40;
+      const pageWidth = 210;
+      const margin = 15;
+      const maxImgWidth = pageWidth - 2 * margin; // 180mm
+      const maxImgHeight = 150; // mm
+
+      for (let i = 0; i < itemsWithFoto.length; i++) {
+        const it = itemsWithFoto[i];
+        
+        // Muat gambar
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = reject;
+          image.src = it.fotoURL;
+        });
+
+        // Hitung dimensi agar proporsional
+        let imgWidth = img.width;
+        let imgHeight = img.height;
+        const ratio = imgWidth / imgHeight;
+        
+        if (imgWidth > maxImgWidth) {
+          imgWidth = maxImgWidth;
+          imgHeight = imgWidth / ratio;
+        }
+        if (imgHeight > maxImgHeight) {
+          imgHeight = maxImgHeight;
+          imgWidth = imgHeight * ratio;
+        }
+
+        // Jika sisa halaman tidak cukup, tambah halaman baru
+        if (y + imgHeight + 15 > 280) {
+          doc.addPage();
+          y = 20;
+        }
+
+        // Tambahkan gambar
+        const x = (pageWidth - imgWidth) / 2;
+        doc.addImage(img, 'JPEG', x, y, imgWidth, imgHeight);
+        
+        // Nama file di bawah gambar
+        y += imgHeight + 5;
+        doc.setFontSize(9);
+        doc.setTextColor(60);
+        doc.text(`File: ${it.fotoName || 'tanpa nama'}`, margin, y);
+        doc.text(`Material: ${it.nama}`, margin, y + 5);
+        doc.text(`Tanggal: ${it.tanggal}`, margin, y + 10);
+        
+        y += 18; // spasi antar item
+        
+        // Garis pemisah tipis (opsional)
+        if (i < itemsWithFoto.length - 1) {
+          doc.setDrawColor(200);
+          doc.line(margin, y-5, pageWidth - margin, y-5);
+        }
+      }
+
+      // Footer
+      doc.setFontSize(8);
+      doc.setTextColor(120);
+      doc.text('Dicetak dari Aplikasi Catatan Material', 15, 280);
+      
+      doc.save(`Foto_Nota_${new Date().toISOString().slice(0,10)}.pdf`);
+      showToast('PDF foto berhasil diunduh');
+    }
+
+    exportFotoPdfBtn.addEventListener('click', () => {
+      exportFotoKePdf().catch(err => {
+        alert('Gagal membuat PDF: ' + err.message);
+      });
+    });
+
+    renderList();
+  })();
+</script>
+</body>
+</html>
